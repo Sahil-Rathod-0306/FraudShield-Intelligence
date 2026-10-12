@@ -1,0 +1,4 @@
+model,precision,recall,f1,roc_auc,pr_auc,true_positive,false_positive,true_negative,false_negative,training_seconds,prediction_seconds
+XGBoost,0.7939,0.2861,0.4206,0.9187,0.5351,470,122,32730,1173,1.4669,0.1104
+Random Forest,0.2232,0.7766,0.3468,0.913,0.5175,1276,4440,28412,367,4.2121,0.1837
+Logistic Regression,0.14,0.8643,0.241,0.8929,0.3078,1420,8721,24131,223,0.1529,0.017
