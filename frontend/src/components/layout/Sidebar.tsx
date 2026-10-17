@@ -1,21 +1,57 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import type {
+  ReactNode,
+} from "react";
 
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import Link from "next/link";
+
+import {
+  usePathname,
+  useRouter,
+} from "next/navigation";
+
+import {
+  apiRequest,
+} from "@/lib/api";
+
+import {
+  removeAuthToken,
+} from "@/lib/auth";
+
+import type {
+  AuthUser,
+  CurrentUserResponse,
+} from "@/types/fraudshield";
+
+
+// =====================================================
+// NAVIGATION TYPE
+// =====================================================
 
 interface NavigationItem {
   name: string;
   href: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }
 
 
+// =====================================================
+// NAVIGATION ITEMS
+// =====================================================
+
 const navigation: NavigationItem[] = [
+
   {
     name: "Dashboard",
+
     href: "/dashboard",
+
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -59,9 +95,12 @@ const navigation: NavigationItem[] = [
     ),
   },
 
+
   {
     name: "Transactions",
+
     href: "/transactions",
+
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -71,16 +110,22 @@ const navigation: NavigationItem[] = [
         strokeWidth="2"
       >
         <path d="M7 7h14" />
+
         <path d="m17 3 4 4-4 4" />
+
         <path d="M17 17H3" />
+
         <path d="m7 13-4 4 4 4" />
       </svg>
     ),
   },
 
+
   {
     name: "Fraud Cases",
+
     href: "/cases",
+
     icon: (
       <svg
         viewBox="0 0 24 24"
@@ -89,7 +134,9 @@ const navigation: NavigationItem[] = [
         stroke="currentColor"
         strokeWidth="2"
       >
-        <path d="M12 3 3 7v6c0 5 3.8 8.4 9 9 5.2-.6 9-4 9-9V7l-9-4Z" />
+        <path
+          d="M12 3 3 7v6c0 5 3.8 8.4 9 9 5.2-.6 9-4 9-9V7l-9-4Z"
+        />
 
         <path d="M12 8v4" />
 
@@ -100,14 +147,24 @@ const navigation: NavigationItem[] = [
 ];
 
 
+// =====================================================
+// ACTIVE ROUTE
+// =====================================================
+
 function isActiveRoute(
   pathname: string,
   href: string
 ) {
 
-  if (href === "/dashboard") {
-    return pathname === "/dashboard";
+  if (
+    href === "/dashboard"
+  ) {
+
+    return (
+      pathname === "/dashboard"
+    );
   }
+
 
   return (
     pathname === href ||
@@ -118,10 +175,22 @@ function isActiveRoute(
 }
 
 
+// =====================================================
+// SIDEBAR
+// =====================================================
+
 export default function Sidebar() {
+
+  // =====================================================
+  // HOOKS
+  // =====================================================
 
   const pathname =
     usePathname();
+
+
+  const router =
+    useRouter();
 
 
   const [
@@ -131,8 +200,158 @@ export default function Sidebar() {
     useState(false);
 
 
+  const [
+    user,
+    setUser,
+  ] =
+    useState<AuthUser | null>(
+      null
+    );
+
+
+  const [
+    userLoading,
+    setUserLoading,
+  ] =
+    useState(true);
+
+
+  // =====================================================
+  // LOAD CURRENT USER
+  // =====================================================
+
+  useEffect(() => {
+
+    let cancelled =
+      false;
+
+
+    const loadUser =
+      async () => {
+
+        try {
+
+          setUserLoading(
+            true
+          );
+
+
+          const response =
+            await apiRequest<CurrentUserResponse>(
+              "/auth/me"
+            );
+
+
+          if (
+            cancelled
+          ) {
+            return;
+          }
+
+
+          setUser(
+            response.data.user
+          );
+
+
+        } catch (error) {
+
+          console.error(
+            "Unable to load current user:",
+            error
+          );
+
+
+          if (
+            !cancelled
+          ) {
+
+            setUser(
+              null
+            );
+          }
+
+
+        } finally {
+
+          if (
+            !cancelled
+          ) {
+
+            setUserLoading(
+              false
+            );
+          }
+
+        }
+      };
+
+
+    void loadUser();
+
+
+    return () => {
+
+      cancelled =
+        true;
+
+    };
+
+  }, []);
+
+
+  // =====================================================
+  // CLOSE MOBILE MENU WHEN ROUTE CHANGES
+  // =====================================================
+
+  useEffect(() => {
+
+    setMobileOpen(
+      false
+    );
+
+  }, [
+    pathname,
+  ]);
+
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+
+  const logout =
+    () => {
+
+      removeAuthToken();
+
+
+      setUser(
+        null
+      );
+
+
+      setMobileOpen(
+        false
+      );
+
+
+      router.replace(
+        "/login"
+      );
+
+
+      router.refresh();
+    };
+
+
+  // =====================================================
+  // UI
+  // =====================================================
+
   return (
+
     <>
+
       {/* =====================================================
           MOBILE HEADER
       ===================================================== */}
@@ -168,6 +387,7 @@ export default function Sidebar() {
 
           <Logo />
 
+
           <div>
 
             <p
@@ -179,6 +399,7 @@ export default function Sidebar() {
             >
               FraudShield
             </p>
+
 
             <p
               className="
@@ -198,10 +419,14 @@ export default function Sidebar() {
 
         <button
           type="button"
-          onClick={() =>
-            setMobileOpen(
-              !mobileOpen
-            )
+          onClick={
+            () =>
+              setMobileOpen(
+                (
+                  current
+                ) =>
+                  !current
+              )
           }
           className="
             rounded-lg
@@ -215,6 +440,7 @@ export default function Sidebar() {
         >
 
           {mobileOpen ? (
+
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -223,9 +449,12 @@ export default function Sidebar() {
               strokeWidth="2"
             >
               <path d="m6 6 12 12" />
+
               <path d="m18 6-12 12" />
             </svg>
+
           ) : (
+
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -234,9 +463,12 @@ export default function Sidebar() {
               strokeWidth="2"
             >
               <path d="M4 6h16" />
+
               <path d="M4 12h16" />
+
               <path d="M4 18h16" />
             </svg>
+
           )}
 
         </button>
@@ -262,7 +494,7 @@ export default function Sidebar() {
           "
         >
 
-          <nav
+          <div
             className="
               border-b
               border-slate-800
@@ -275,14 +507,41 @@ export default function Sidebar() {
               pathname={
                 pathname
               }
-              onNavigate={() =>
-                setMobileOpen(
-                  false
-                )
+              onNavigate={
+                () =>
+                  setMobileOpen(
+                    false
+                  )
               }
             />
 
-          </nav>
+
+            {/* USER INFO */}
+
+            <div
+              className="
+                mt-5
+                border-t
+                border-slate-800
+                pt-5
+              "
+            >
+
+              <UserPanel
+                user={
+                  user
+                }
+                loading={
+                  userLoading
+                }
+                onLogout={
+                  logout
+                }
+              />
+
+            </div>
+
+          </div>
 
         </div>
 
@@ -310,7 +569,9 @@ export default function Sidebar() {
         "
       >
 
-        {/* LOGO */}
+        {/* =====================================================
+            LOGO
+        ===================================================== */}
 
         <div
           className="
@@ -366,7 +627,9 @@ export default function Sidebar() {
         </div>
 
 
-        {/* NAVIGATION */}
+        {/* =====================================================
+            NAVIGATION
+        ===================================================== */}
 
         <div
           className="
@@ -401,7 +664,9 @@ export default function Sidebar() {
         </div>
 
 
-        {/* FOOTER */}
+        {/* =====================================================
+            USER / LOGOUT
+        ===================================================== */}
 
         <div
           className="
@@ -411,65 +676,311 @@ export default function Sidebar() {
           "
         >
 
+          <UserPanel
+            user={
+              user
+            }
+            loading={
+              userLoading
+            }
+            onLogout={
+              logout
+            }
+          />
+
+        </div>
+
+      </aside>
+
+    </>
+  );
+}
+
+
+// =====================================================
+// USER PANEL
+// =====================================================
+
+function UserPanel({
+  user,
+  loading,
+  onLogout,
+}: {
+  user:
+    AuthUser | null;
+
+  loading:
+    boolean;
+
+  onLogout:
+    () => void;
+}) {
+
+  // =====================================================
+  // LOADING
+  // =====================================================
+
+  if (loading) {
+
+    return (
+
+      <div
+        className="
+          rounded-xl
+          border
+          border-slate-800
+          bg-slate-900/60
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-center
+            gap-3
+          "
+        >
+
           <div
             className="
-              rounded-xl
-              border
-              border-slate-800
-              bg-slate-900/60
-              p-4
+              h-10
+              w-10
+              animate-pulse
+              rounded-full
+              bg-slate-800
+            "
+          />
+
+
+          <div
+            className="
+              flex-1
             "
           >
 
             <div
               className="
-                flex
-                items-center
-                gap-2
+                h-3
+                w-24
+                animate-pulse
+                rounded
+                bg-slate-800
               "
-            >
-
-              <span
-                className="
-                  h-2
-                  w-2
-                  rounded-full
-                  bg-green-400
-                "
-              />
+            />
 
 
-              <p
-                className="
-                  text-xs
-                  font-medium
-                  text-slate-300
-                "
-              >
-                Local Development
-              </p>
-
-            </div>
-
-
-            <p
+            <div
               className="
                 mt-2
-                text-[11px]
-                leading-5
-                text-slate-600
+                h-2
+                w-16
+                animate-pulse
+                rounded
+                bg-slate-800
               "
-            >
-              FraudShield Intelligence
-              Platform
-            </p>
+            />
 
           </div>
 
         </div>
 
-      </aside>
-    </>
+      </div>
+
+    );
+  }
+
+
+  // =====================================================
+  // USER NOT AVAILABLE
+  // =====================================================
+
+  if (!user) {
+
+    return (
+
+      <div
+        className="
+          rounded-xl
+          border
+          border-slate-800
+          bg-slate-900/60
+          p-4
+        "
+      >
+
+        <p
+          className="
+            text-xs
+            text-slate-500
+          "
+        >
+          User information unavailable.
+        </p>
+
+
+        <button
+          type="button"
+          onClick={
+            onLogout
+          }
+          className="
+            mt-3
+            w-full
+            rounded-lg
+            border
+            border-slate-700
+            bg-slate-950
+            px-3
+            py-2
+            text-xs
+            font-medium
+            text-slate-300
+            transition
+            hover:bg-slate-800
+          "
+        >
+          Return to Login
+        </button>
+
+      </div>
+
+    );
+  }
+
+
+  // =====================================================
+  // USER
+  // =====================================================
+
+  return (
+
+    <div
+      className="
+        rounded-xl
+        border
+        border-slate-800
+        bg-slate-900/60
+        p-4
+      "
+    >
+
+      <div
+        className="
+          flex
+          items-center
+          gap-3
+        "
+      >
+
+        {/* AVATAR */}
+
+        <div
+          className="
+            flex
+            h-10
+            w-10
+            shrink-0
+            items-center
+            justify-center
+            rounded-full
+            bg-cyan-400
+            font-bold
+            text-slate-950
+          "
+        >
+
+          {
+            user.name
+              .charAt(0)
+              .toUpperCase()
+          }
+
+        </div>
+
+
+        {/* NAME + ROLE */}
+
+        <div
+          className="
+            min-w-0
+            flex-1
+          "
+        >
+
+          <p
+            className="
+              truncate
+              text-sm
+              font-semibold
+              text-white
+            "
+          >
+            {user.name}
+          </p>
+
+
+          <p
+            className="
+              mt-0.5
+              text-[10px]
+              font-semibold
+              uppercase
+              tracking-wider
+              text-cyan-400
+            "
+          >
+            {user.role}
+          </p>
+
+        </div>
+
+      </div>
+
+
+      {/* EMAIL */}
+
+      <p
+        className="
+          mt-3
+          truncate
+          text-xs
+          text-slate-500
+        "
+      >
+        {user.email}
+      </p>
+
+
+      {/* LOGOUT */}
+
+      <button
+        type="button"
+        onClick={
+          onLogout
+        }
+        className="
+          mt-4
+          w-full
+          rounded-lg
+          border
+          border-slate-700
+          bg-slate-950
+          px-3
+          py-2
+          text-xs
+          font-medium
+          text-slate-300
+          transition
+          hover:border-red-900
+          hover:bg-red-950/30
+          hover:text-red-300
+        "
+      >
+        Logout
+      </button>
+
+    </div>
   );
 }
 
@@ -483,6 +994,7 @@ function NavigationLinks({
   onNavigate,
 }: {
   pathname: string;
+
   onNavigate?: () => void;
 }) {
 
@@ -494,61 +1006,63 @@ function NavigationLinks({
       "
     >
 
-      {navigation.map(
-        (
-          item
-        ) => {
+      {
+        navigation.map(
+          (
+            item
+          ) => {
 
-          const active =
-            isActiveRoute(
-              pathname,
-              item.href
-            );
-
-
-          return (
-
-            <Link
-              key={
+            const active =
+              isActiveRoute(
+                pathname,
                 item.href
-              }
-              href={
-                item.href
-              }
-              onClick={
-                onNavigate
-              }
-              className={`
-                flex
-                items-center
-                gap-3
-                rounded-xl
-                px-4
-                py-3
-                text-sm
-                font-medium
-                transition
+              );
 
-                ${
-                  active
-                    ? "bg-cyan-400 text-slate-950"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-white"
+
+            return (
+
+              <Link
+                key={
+                  item.href
                 }
-              `}
-            >
+                href={
+                  item.href
+                }
+                onClick={
+                  onNavigate
+                }
+                className={`
+                  flex
+                  items-center
+                  gap-3
+                  rounded-xl
+                  px-4
+                  py-3
+                  text-sm
+                  font-medium
+                  transition
 
-              {item.icon}
+                  ${
+                    active
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-400 hover:bg-slate-900 hover:text-white"
+                  }
+                `}
+              >
+
+                {item.icon}
 
 
-              <span>
-                {item.name}
-              </span>
+                <span>
+                  {item.name}
+                </span>
 
-            </Link>
+              </Link>
 
-          );
-        }
-      )}
+            );
+          }
+        )
+      }
 
     </div>
   );
@@ -600,7 +1114,10 @@ function Logo() {
           "
         />
 
-        <path d="m9 12 2 2 4-4" />
+
+        <path
+          d="m9 12 2 2 4-4"
+        />
 
       </svg>
 

@@ -30,7 +30,7 @@ export function hashToken(
 
 
 // =====================================================
-// VERIFICATION EXPIRY
+// EMAIL VERIFICATION EXPIRY
 // =====================================================
 
 export function getVerificationExpiry() {
@@ -39,6 +39,28 @@ export function getVerificationExpiry() {
     Number(
       process.env
         .EMAIL_VERIFICATION_EXPIRES_MINUTES
+    ) || 30;
+
+
+  return new Date(
+    Date.now() +
+    minutes *
+      60 *
+      1000
+  );
+}
+
+
+// =====================================================
+// PASSWORD RESET EXPIRY
+// =====================================================
+
+export function getPasswordResetExpiry() {
+
+  const minutes =
+    Number(
+      process.env
+        .PASSWORD_RESET_EXPIRES_MINUTES
     ) || 30;
 
 

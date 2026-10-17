@@ -8,6 +8,10 @@ import bcrypt
   from "bcryptjs";
 
 
+const BCRYPT_HASH_PATTERN =
+  /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
+
+
 // =====================================================
 // TYPES
 // =====================================================
@@ -257,6 +261,20 @@ userSchema.pre(
     }
 
 
+    // Passwords supplied to this model must be plaintext. Hashing a hash
+    // produces an account that cannot authenticate with the original secret.
+    if (
+      BCRYPT_HASH_PATTERN.test(
+        this.password
+      )
+    ) {
+
+      throw new Error(
+        "Password must be plaintext before saving a User; the User model hashes it automatically."
+      );
+    }
+
+
     const salt =
       await bcrypt.genSalt(
         12
@@ -286,10 +304,18 @@ userSchema.methods.comparePassword =
     }
 
 
-    return bcrypt.compare(
-      candidatePassword,
-      this.password
-    );
+    try {
+
+      return await bcrypt.compare(
+        candidatePassword,
+        this.password
+      );
+
+    } catch {
+
+      // A malformed legacy value is not a valid local password.
+      return false;
+    }
   };
 
 

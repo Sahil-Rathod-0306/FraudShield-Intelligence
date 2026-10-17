@@ -679,3 +679,51 @@ export interface DashboardOverviewResponse {
       DashboardRecentTransaction[];
   };
 }
+
+export type UserRole =
+  | "ADMIN"
+  | "ANALYST"
+  | "INVESTIGATOR";
+
+
+export interface AuthUser {
+  id: string;
+
+  name: string;
+
+  email: string;
+
+  role: UserRole;
+
+  status?: string;
+
+  authProvider?: string;
+
+  isEmailVerified?: boolean;
+
+  lastLoginAt?: string;
+}
+
+
+export interface LoginResponse {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    token: string;
+
+    user: AuthUser;
+  };
+}
+
+
+export interface CurrentUserResponse {
+  success: boolean;
+
+  message: string;
+
+  data: {
+    user: AuthUser;
+  };
+}

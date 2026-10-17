@@ -3,10 +3,12 @@ import {
 } from "express";
 
 import {
+  forgotPassword,
   getCurrentUser,
   login,
   register,
   resendVerification,
+  resetPassword,
   verifyEmail,
 } from "./auth.controller.js";
 
@@ -68,6 +70,23 @@ router.get(
   authenticate,
   getCurrentUser
 );
+// =====================================================
+// FORGOT PASSWORD
+// =====================================================
 
+router.post(
+  "/forgot-password",
+  forgotPassword
+);
+
+
+// =====================================================
+// RESET PASSWORD
+// =====================================================
+
+router.post(
+  "/reset-password",
+  resetPassword
+);
 
 export default router;

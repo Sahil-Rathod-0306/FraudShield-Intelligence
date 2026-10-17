@@ -1,6 +1,5 @@
 import "dotenv/config";
 
-import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 
 import User from "../modules/users/user.model.js";
@@ -67,17 +66,6 @@ const createInvestigator = async () => {
 
 
     // -----------------------------------
-    // Hash password
-    // -----------------------------------
-
-    const hashedPassword =
-      await bcrypt.hash(
-        plainPassword,
-        12
-      );
-
-
-    // -----------------------------------
     // Create investigator
     // -----------------------------------
 
@@ -90,7 +78,8 @@ const createInvestigator = async () => {
         email,
 
         password:
-          hashedPassword,
+          // The User pre-save hook hashes the plaintext exactly once.
+          plainPassword,
 
         role:
           "INVESTIGATOR",

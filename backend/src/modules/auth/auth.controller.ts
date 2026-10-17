@@ -12,22 +12,36 @@ import {
 
 import {
   generateSecureToken,
+  getPasswordResetExpiry,
   getVerificationExpiry,
   hashToken,
 } from "./token.service.js";
 
 import {
+  sendPasswordResetEmail,
   sendVerificationEmail,
 } from "./email.service.js";
 
-type AuthenticatedRequest = Request & {
-  user?: unknown;
-};
+import type {
+  AuthenticatedRequest,
+} from "../../middleware/auth.middleware.js";
 
 
 // =====================================================
-// EMAIL VALIDATION
+// HELPERS
 // =====================================================
+
+function normalizeEmail(
+  email: unknown
+) {
+
+  return String(
+    email ?? ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
 
 function isValidEmail(
   email: string
@@ -60,7 +74,7 @@ export const register =
 
 
       // =====================================================
-      // REQUIRED VALUES
+      // REQUIRED FIELDS
       // =====================================================
 
       if (
@@ -92,9 +106,9 @@ export const register =
 
 
       const normalizedEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
+        normalizeEmail(
+          email
+        );
 
 
       const normalizedPassword =
@@ -102,7 +116,7 @@ export const register =
 
 
       // =====================================================
-      // VALIDATE NAME
+      // NAME VALIDATION
       // =====================================================
 
       if (
@@ -124,7 +138,7 @@ export const register =
 
 
       // =====================================================
-      // VALIDATE EMAIL
+      // EMAIL VALIDATION
       // =====================================================
 
       if (
@@ -147,7 +161,7 @@ export const register =
 
 
       // =====================================================
-      // VALIDATE PASSWORD
+      // PASSWORD VALIDATION
       // =====================================================
 
       if (
@@ -169,7 +183,7 @@ export const register =
 
 
       // =====================================================
-      // CHECK EXISTING USER
+      // EXISTING USER
       // =====================================================
 
       const existingUser =
@@ -181,7 +195,9 @@ export const register =
         });
 
 
-      if (existingUser) {
+      if (
+        existingUser
+      ) {
 
         return res
           .status(409)
@@ -190,14 +206,16 @@ export const register =
             success: false,
 
             message:
-              "An account with this email already exists",
+              existingUser.isEmailVerified
+                ? "An account with this email already exists"
+                : "An unverified account with this email already exists. Please verify your email or resend the verification email.",
 
           });
       }
 
 
       // =====================================================
-      // EMAIL VERIFICATION TOKEN
+      // VERIFICATION TOKEN
       // =====================================================
 
       const verificationToken =
@@ -230,8 +248,7 @@ export const register =
           password:
             normalizedPassword,
 
-          // IMPORTANT:
-          // Public registration can NEVER choose role.
+          // Public registration cannot select a role.
           role:
             "ANALYST",
 
@@ -254,7 +271,7 @@ export const register =
 
 
       // =====================================================
-      // SEND EMAIL
+      // SEND VERIFICATION EMAIL
       // =====================================================
 
       try {
@@ -272,6 +289,7 @@ export const register =
 
         });
 
+
       } catch (
         emailError
       ) {
@@ -282,8 +300,9 @@ export const register =
         );
 
 
-        // Remove the new user if email sending fails.
-        // This allows them to register again cleanly.
+        // Account was just created and verification
+        // email could not be sent.
+        // Delete it so user can register again.
 
         await User.findByIdAndDelete(
           user._id
@@ -321,7 +340,7 @@ export const register =
             user: {
 
               id:
-                user._id,
+                user._id.toString(),
 
               name:
                 user.name,
@@ -331,6 +350,12 @@ export const register =
 
               role:
                 user.role,
+
+              status:
+                user.status,
+
+              authProvider:
+                user.authProvider,
 
               isEmailVerified:
                 user.isEmailVerified,
@@ -409,7 +434,7 @@ export const verifyEmail =
 
 
       // =====================================================
-      // HASH INCOMING TOKEN
+      // HASH TOKEN
       // =====================================================
 
       const tokenHash =
@@ -430,8 +455,10 @@ export const verifyEmail =
               tokenHash,
 
             emailVerificationTokenExpires: {
+
               $gt:
                 new Date(),
+
             },
 
           })
@@ -440,7 +467,9 @@ export const verifyEmail =
           );
 
 
-      if (!user) {
+      if (
+        !user
+      ) {
 
         return res
           .status(400)
@@ -456,7 +485,7 @@ export const verifyEmail =
 
 
       // =====================================================
-      // VERIFY
+      // VERIFY ACCOUNT
       // =====================================================
 
       user.isEmailVerified =
@@ -528,7 +557,9 @@ export const resendVerification =
         req.body;
 
 
-      if (!email) {
+      if (
+        !email
+      ) {
 
         return res
           .status(400)
@@ -544,9 +575,28 @@ export const resendVerification =
 
 
       const normalizedEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
+        normalizeEmail(
+          email
+        );
+
+
+      if (
+        !isValidEmail(
+          normalizedEmail
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success: false,
+
+            message:
+              "Please enter a valid email address",
+
+          });
+      }
 
 
       const user =
@@ -558,7 +608,9 @@ export const resendVerification =
         });
 
 
-      // Avoid revealing whether an account exists.
+      // =====================================================
+      // DON'T REVEAL ACCOUNT EXISTENCE
+      // =====================================================
 
       if (
         !user ||
@@ -578,6 +630,10 @@ export const resendVerification =
       }
 
 
+      // =====================================================
+      // CREATE NEW TOKEN
+      // =====================================================
+
       const verificationToken =
         generateSecureToken();
 
@@ -594,6 +650,10 @@ export const resendVerification =
 
       await user.save();
 
+
+      // =====================================================
+      // SEND EMAIL
+      // =====================================================
 
       await sendVerificationEmail({
 
@@ -664,6 +724,10 @@ export const login =
         req.body;
 
 
+      // =====================================================
+      // REQUIRED FIELDS
+      // =====================================================
+
       if (
         !email ||
         !password
@@ -683,13 +747,32 @@ export const login =
 
 
       const normalizedEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
+        normalizeEmail(
+          email
+        );
+
+
+      if (
+        !isValidEmail(
+          normalizedEmail
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success: false,
+
+            message:
+              "Please enter a valid email address",
+
+          });
+      }
 
 
       // =====================================================
-      // FIND USER + PASSWORD
+      // FIND USER + INCLUDE PASSWORD
       // =====================================================
 
       const user =
@@ -705,7 +788,73 @@ export const login =
           );
 
 
-      if (!user) {
+      // =====================================================
+      // SAFE DEVELOPMENT DEBUG
+      // =====================================================
+
+      if (
+        process.env.NODE_ENV !==
+        "production"
+      ) {
+
+        const storedPassword =
+          user?.password;
+
+        console.log(
+          "LOGIN DEBUG:",
+          {
+
+            email:
+              normalizedEmail,
+
+            userFound:
+              Boolean(user),
+
+            hasPassword:
+              Boolean(
+                storedPassword
+              ),
+
+            // These report only metadata: never the submitted password or
+            // its stored bcrypt hash.
+            passwordFieldSelected:
+              Boolean(
+                user &&
+                Object.prototype.hasOwnProperty.call(
+                  user.toObject(),
+                  "password"
+                )
+              ),
+
+            passwordLooksLikeBcrypt:
+              Boolean(
+                storedPassword &&
+                /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(
+                  storedPassword
+                )
+              ),
+
+            verified:
+              user?.isEmailVerified,
+
+            status:
+              user?.status,
+
+            authProvider:
+              user?.authProvider,
+
+          }
+        );
+      }
+
+
+      // =====================================================
+      // USER NOT FOUND
+      // =====================================================
+
+      if (
+        !user
+      ) {
 
         return res
           .status(401)
@@ -721,12 +870,86 @@ export const login =
 
 
       // =====================================================
-      // STATUS
+      // LOCAL PASSWORD MUST EXIST
+      // =====================================================
+
+      if (
+        !user.password
+      ) {
+
+        if (
+          process.env.NODE_ENV !==
+          "production"
+        ) {
+
+          console.log(
+            "LOGIN DEBUG: User has no local password."
+          );
+        }
+
+
+        return res
+          .status(401)
+          .json({
+
+            success: false,
+
+            message:
+              "Invalid email or password",
+
+          });
+      }
+
+
+      // =====================================================
+      // CHECK PASSWORD FIRST
+      // =====================================================
+
+      const passwordMatches =
+        await user.comparePassword(
+          String(password)
+        );
+
+
+      if (
+        process.env.NODE_ENV !==
+        "production"
+      ) {
+
+        console.log(
+          "PASSWORD MATCH:",
+          {
+            email: normalizedEmail,
+            passwordMatches,
+          }
+        );
+      }
+
+
+      if (
+        !passwordMatches
+      ) {
+
+        return res
+          .status(401)
+          .json({
+
+            success: false,
+
+            message:
+              "Invalid email or password",
+
+          });
+      }
+
+
+      // =====================================================
+      // ACCOUNT STATUS
       // =====================================================
 
       if (
         user.status !==
-          "ACTIVE"
+        "ACTIVE"
       ) {
 
         return res
@@ -743,7 +966,7 @@ export const login =
 
 
       // =====================================================
-      // EMAIL VERIFIED?
+      // EMAIL VERIFICATION
       // =====================================================
 
       if (
@@ -767,43 +990,34 @@ export const login =
 
 
       // =====================================================
-      // CHECK PASSWORD
+      // UPDATE LAST LOGIN
       // =====================================================
 
-      const matches =
-        await user.comparePassword(
-          String(password)
-        );
-
-
-      if (!matches) {
-
-        return res
-          .status(401)
-          .json({
-
-            success: false,
-
-            message:
-              "Invalid email or password",
-
-          });
-      }
-
-
-      // =====================================================
-      // UPDATE LOGIN
-      // =====================================================
-
-      user.lastLoginAt =
+      const lastLoginAt =
         new Date();
 
 
-      await user.save();
+      // Use updateOne instead of user.save().
+      // This avoids running document save hooks unnecessarily.
+
+      await User.updateOne(
+
+        {
+          _id:
+            user._id,
+        },
+
+        {
+          $set: {
+            lastLoginAt,
+          },
+        }
+
+      );
 
 
       // =====================================================
-      // JWT
+      // GENERATE JWT
       // =====================================================
 
       const jwtToken =
@@ -820,6 +1034,10 @@ export const login =
 
         });
 
+
+      // =====================================================
+      // SUCCESS
+      // =====================================================
 
       return res
         .status(200)
@@ -838,7 +1056,7 @@ export const login =
             user: {
 
               id:
-                user._id,
+                user._id.toString(),
 
               name:
                 user.name,
@@ -858,8 +1076,7 @@ export const login =
               isEmailVerified:
                 user.isEmailVerified,
 
-              lastLoginAt:
-                user.lastLoginAt,
+              lastLoginAt,
 
             },
 
@@ -887,11 +1104,430 @@ export const login =
           message:
             "Failed to login",
 
+          error:
+            process.env.NODE_ENV ===
+            "development"
+              ? (
+                  error instanceof Error
+                    ? error.message
+                    : "Unknown error"
+                )
+              : undefined,
+
         });
     }
   };
 
 
+
+
+
+// =====================================================
+// RESET PASSWORD
+// =====================================================
+
+export const resetPassword =
+  async (
+    req: Request,
+    res: Response
+  ) => {
+
+    try {
+
+      const {
+        token,
+        password,
+      } =
+        req.body;
+
+
+      // =====================================================
+      // VALIDATION
+      // =====================================================
+
+      if (
+        !token ||
+        typeof token !==
+          "string"
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Password reset token is required",
+
+          });
+      }
+
+
+      if (
+        !password ||
+        typeof password !==
+          "string"
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "New password is required",
+
+          });
+      }
+
+
+      if (
+        password.length <
+        8
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Password must contain at least 8 characters",
+
+          });
+      }
+
+
+      // =====================================================
+      // HASH INCOMING TOKEN
+      // =====================================================
+
+      const resetTokenHash =
+        hashToken(
+          token
+        );
+
+
+      // =====================================================
+      // FIND USER
+      // =====================================================
+
+      const user =
+        await User
+          .findOne({
+
+            passwordResetTokenHash:
+              resetTokenHash,
+
+            passwordResetTokenExpires: {
+
+              $gt:
+                new Date(),
+
+            },
+
+          })
+          .select(
+            "+passwordResetTokenHash +passwordResetTokenExpires +password"
+          );
+
+
+      if (
+        !user
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Password reset link is invalid or has expired",
+
+          });
+      }
+
+
+      // =====================================================
+      // SET NEW PASSWORD
+      // =====================================================
+
+      user.password =
+        password;
+
+
+      user.passwordResetTokenHash =
+        undefined;
+
+
+      user.passwordResetTokenExpires =
+        undefined;
+
+
+      // If this account previously supported Google + local,
+      // keep LOCAL_GOOGLE.
+      //
+      // Otherwise ensure this is a local account.
+
+      if (
+        user.authProvider !==
+        "LOCAL_GOOGLE"
+      ) {
+
+        user.authProvider =
+          "LOCAL";
+      }
+
+
+      await user.save();
+
+
+      return res
+        .status(200)
+        .json({
+
+          success:
+            true,
+
+          message:
+            "Password reset successfully. You can now sign in with your new password.",
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Reset password error:",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          message:
+            "Unable to reset password",
+
+        });
+    }
+  };
+  // =====================================================
+// FORGOT PASSWORD
+// =====================================================
+
+export const forgotPassword =
+  async (
+    req: Request,
+    res: Response
+  ) => {
+
+    try {
+
+      const {
+        email,
+      } =
+        req.body;
+
+
+      if (
+        !email
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Email is required",
+
+          });
+      }
+
+
+      const normalizedEmail =
+        normalizeEmail(
+          email
+        );
+
+
+      if (
+        !isValidEmail(
+          normalizedEmail
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            message:
+              "Please enter a valid email address",
+
+          });
+      }
+
+
+      // =====================================================
+      // FIND USER
+      // =====================================================
+
+      const user =
+        await User.findOne({
+
+          email:
+            normalizedEmail,
+
+        });
+
+
+      // =====================================================
+      // GENERIC RESPONSE
+      // =====================================================
+      //
+      // Do not reveal whether the email exists.
+      // =====================================================
+
+      if (
+        !user
+      ) {
+
+        return res
+          .status(200)
+          .json({
+
+            success:
+              true,
+
+            message:
+              "If an account exists with this email, a password reset link has been sent.",
+
+          });
+      }
+
+
+      // =====================================================
+      // GOOGLE-ONLY ACCOUNT
+      // =====================================================
+
+      if (
+        user.authProvider ===
+        "GOOGLE"
+      ) {
+
+        return res
+          .status(200)
+          .json({
+
+            success:
+              true,
+
+            message:
+              "If an account exists with this email, a password reset link has been sent.",
+
+          });
+      }
+
+
+      // =====================================================
+      // GENERATE RESET TOKEN
+      // =====================================================
+
+      const resetToken =
+        generateSecureToken();
+
+
+      const resetTokenHash =
+        hashToken(
+          resetToken
+        );
+
+
+      user.passwordResetTokenHash =
+        resetTokenHash;
+
+
+      user.passwordResetTokenExpires =
+        getPasswordResetExpiry();
+
+
+      await user.save();
+
+
+      // =====================================================
+      // SEND EMAIL
+      // =====================================================
+
+      await sendPasswordResetEmail({
+
+        email:
+          user.email,
+
+        name:
+          user.name,
+
+        token:
+          resetToken,
+
+      });
+
+
+      return res
+        .status(200)
+        .json({
+
+          success:
+            true,
+
+          message:
+            "If an account exists with this email, a password reset link has been sent.",
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        "Forgot password error:",
+        error
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          message:
+            "Unable to process password reset request",
+
+        });
+    }
+  };
 // =====================================================
 // GET CURRENT USER
 // =====================================================
@@ -907,7 +1543,9 @@ export const getCurrentUser =
 
     try {
 
-      if (!req.user) {
+      if (
+        !req.user
+      ) {
 
         return res
           .status(401)
